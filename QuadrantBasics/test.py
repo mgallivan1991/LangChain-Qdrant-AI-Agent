@@ -37,9 +37,18 @@ def test_load_a_companys_documents():
     main.add_documents_to_vector_db(db, pdf)
 
 
+def test_retrieve_a_company_documents():
+    company = "company1"
+
+    test_result = main.retrieve_doc_by_metadata(company)
+
+    print(test_result)
+
+
 def run_tests():
     test_multiple_collections()
     test_load_a_companys_documents()
+    test_retrieve_a_company_documents()
 
 
 run_tests()
