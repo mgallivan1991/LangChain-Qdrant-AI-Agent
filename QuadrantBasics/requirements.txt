@@ -2,5 +2,6 @@ langchain-ollama
 langchain_community
 qdrant-client
 langchain-qdrant
-streamlit
+streamlit~=1.40.1
 pypdf
+langchain~=0.2.17

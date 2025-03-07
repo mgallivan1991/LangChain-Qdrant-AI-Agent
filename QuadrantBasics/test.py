@@ -1,5 +1,6 @@
 import qdrant_client.grpc
 import main
+import os
 from qdrant_client import QdrantClient
 
 
@@ -30,17 +31,25 @@ def test_multiple_collections():
 def test_load_a_companys_documents():
     # Test 2 Get a company's db and load it
 
+    company = 'company1'
+
     pdf = 'pdfs/RegistratrionRenewalEmail.pdf'
 
-    db = main.database_list.get('company1')
+    db = main.database_list.get(company)
 
-    main.add_documents_to_vector_db(db, pdf)
+    result = main.add_documents_to_vector_db(db, pdf, company)
+
+    print(result)
 
 
 def test_retrieve_a_company_documents():
     company = "company1"
 
-    test_result = main.retrieve_doc_by_metadata(company)
+    pdf = 'pdfs/RegistratrionRenewalEmail.pdf'
+
+    file_name = os.path.basename(pdf)
+
+    test_result = main.retrieve_doc_by_metadata(company, file_name)
 
     print(test_result)
 
