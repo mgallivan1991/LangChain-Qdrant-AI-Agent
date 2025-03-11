@@ -1,6 +1,8 @@
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_ollama.llms import OllamaLLM
 from uuid import uuid4
 from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
@@ -9,7 +11,17 @@ from qdrant_client.http.models import Distance, VectorParams
 # from langchain.embeddings import DeepSeekEmbeddings  # Replace with the actual embedding model you're using
 import os
 
+template = """
+You are an assistant that answers questions. Using the following retrieved information, answer the user question. If you don't know the answer, say that you don't know. Use up to three sentences, keeping the answer concise.
+Question: {question} 
+Context: {context} 
+Answer:
+"""
+
+
 embeddings = OllamaEmbeddings(model="deepseek-r1:1.5b")
+
+model = OllamaLLM(model="deepseek-r1:1.5b")
 
 url = "localhost:6333"
 
@@ -146,3 +158,17 @@ def retrieve_doc_by_metadata(company, file_name):
 
     print(result)
     return result
+
+
+def retrieve_docs(db, query, k=4):
+    print(db.similarity_search(query))
+    return db.similarity_search(query, k)
+
+
+def question_pdf(question, documents):
+    print(documents)
+    context = "\n\n".join([doc.page_content for doc in documents])
+    prompt = ChatPromptTemplate.from_template(template)
+    chain = prompt | model
+
+    return chain.invoke({"question": question, "context": context})

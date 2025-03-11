@@ -1,7 +1,20 @@
 import streamlit as st
 import main as main
+import os
 
-st.title("Chat with PDFs with Deepseek")
+st.title("Upload PDFs to Company Database")
+
+# Company selection
+companies = ["Company A", "Company B", "Company C"]  # You can modify this list as needed
+selected_company = st.selectbox("Select Company", companies)
+
+# Initialize vector database for the selected company
+db = main.create_qdrant_database(selected_company)
+
+# Display debug information
+st.sidebar.write("Debug Information:")
+doc_list = main.retrieve_doc_by_metadata(company=selected_company, file_name="")
+st.sidebar.write(f"Number of documents in collection: {len(doc_list[0]) if doc_list else 0}")
 
 uploaded_file = st.file_uploader(
     "Upload PDF",
@@ -10,14 +23,27 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file:
-    main.upload_pdf(uploaded_file)
-    db = main.create_vector_store(main.pdfs_directory + uploaded_file.name)
-    question = st.chat_input()
-
-    if question:
-        st.chat_message("user").write(question)
-        related_documents = main.retrieve_docs(db, question)
-        answer = main.question_pdf(question, related_documents)
-        st.chat_message("assistant").write(answer)
-        # Test retrieval of docs
-        # st.text(main.retrieve_docs(db=db, query="NVIDIA STOCK"))2
+    file_name = uploaded_file.name
+    
+    # Check if file exists in the selected company's collection
+    doc_list = main.retrieve_doc_by_metadata(company=selected_company, file_name=file_name)
+    file_exists = len(doc_list[0]) > 0
+    
+    if file_exists:
+        st.error(f"This PDF already exists in {selected_company}'s collection.")
+    else:
+        try:
+            # Save the PDF file
+            main.upload_pdf(uploaded_file)
+            
+            # Add the document to the company's collection
+            result = main.add_documents_to_vector_db(db, main.pdfs_directory + file_name, selected_company)
+            if result == "Docs added to db":
+                st.success(f"PDF successfully uploaded to {selected_company}'s collection")
+                # Update document count
+                doc_list = main.retrieve_doc_by_metadata(company=selected_company, file_name="")
+                st.sidebar.write(f"Updated number of documents: {len(doc_list[0]) if doc_list else 0}")
+            else:
+                st.warning(result)
+        except Exception as e:
+            st.error(f"Error uploading file: {str(e)}")
