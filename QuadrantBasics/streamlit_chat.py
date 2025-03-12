@@ -31,14 +31,20 @@ if question := st.chat_input("Ask a question about your company's documents"):
     st.session_state.messages.append({"role": "user", "content": question})
     
     try:
-        # Get response
-        related_documents = main.retrieve_docs(db, question)
+        # Get response with company filter
+        related_documents = main.retrieve_docs(db, question, selected_company)
         st.sidebar.write(f"Found {len(related_documents)} related documents")
         
         if not related_documents:
             st.warning("No relevant documents found for your query.")
             answer = "I couldn't find any relevant information in the documents to answer your question."
         else:
+            # Show relevance scores in debug info
+            st.sidebar.write("Document Relevance Scores:")
+            for doc, score in related_documents:
+                filename = doc.metadata.get('file_name', 'Unknown')
+                st.sidebar.write(f"{filename}: {score:.4f}")
+            
             answer = main.question_pdf(question, related_documents)
         
         # Display assistant response

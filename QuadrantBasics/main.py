@@ -37,23 +37,29 @@ qdrant_client = QdrantClient(url=url)
 
 
 def create_qdrant_database(company_name):
-    # DONE ADD COLLECTION NAME AS COMPANY NAME and pass to DB Creation
+    # Return existing database instance if already created in this session
+    if company_name in database_list:
+        return database_list[company_name]
 
-    # Don't create the vector database if the company already has one
-    if company_name in database_list.keys():
-        return
+    # Connect to existing collection or create new one
+    try:
+        # Try to connect to existing collection
+        vector_db = QdrantVectorStore(
+            client=qdrant_client,
+            collection_name=company_name,
+            embeddings=embeddings,
+        )
+    except Exception:
+        # If collection doesn't exist, create a new one
+        vector_db = QdrantVectorStore.from_documents(
+            [],  # Empty docs since we'll add them later
+            embeddings,
+            url=url,
+            prefer_grpc=True,
+            collection_name=company_name,
+        )
 
-    # Create the shell database with the embeddings passed in from above
-    docs = []  # put docs here
-    vector_db = QdrantVectorStore.from_documents(
-        docs,
-        embeddings,
-        url=url,
-        prefer_grpc=True,
-        collection_name=company_name,
-    )
-
-    # Add the shell database to the database dictionary base on the number of
+    # Add the database instance to our session cache
     database_list[company_name] = vector_db
 
     return vector_db
@@ -88,31 +94,34 @@ def add_documents_to_vector_db(db, file_path, company):
     # Run the text splitter on the uploaded document
     chunked_docs = text_splitter.split_documents(documents)
 
-
-
+    # Prepare metadata
     metadata = {
         "file_name": file_name,
         "company": company
     }
 
+    # Update metadata for each chunk
     for doc in chunked_docs:
         doc.metadata = metadata
-    # TODO READ FROM DATABASE AND DONT UPLOAD FILE IF THE NAME ALREADY EXISTS
 
-    str_docs = [
-        str(doc)
-        for doc in chunked_docs
-    ]
-
+    # Convert documents to strings for embedding
+    str_docs = [str(doc.page_content) for doc in chunked_docs]
+    
+    # Generate embeddings
     embedded_docs = embeddings.embed_documents(str_docs)
 
+    # Generate UUIDs for each chunk
     uuids = [str(uuid4()) for _ in range(len(chunked_docs))]
 
+    # Create points with document content in payload
     points = [
         {
-            "id": uuids[i],  # Unique ID for each document chunk
+            "id": uuids[i],
             "vector": embedded_docs[i],
-            "payload": chunked_docs[i].metadata  # Include metadata here as part of the payload
+            "payload": {
+                "text": chunked_docs[i].page_content,  # Store the actual text content
+                "metadata": chunked_docs[i].metadata  # Store metadata separately
+            }
         }
         for i in range(len(chunked_docs))
     ]
@@ -160,13 +169,49 @@ def retrieve_doc_by_metadata(company, file_name):
     return result
 
 
-def retrieve_docs(db, query, k=4):
-    print(db.similarity_search(query))
-    return db.similarity_search(query, k)
+def retrieve_docs(db, query, company, k=4):
+    # Create a filter for the company metadata using Qdrant models
+    search_filter = models.Filter(
+        must=[
+            models.FieldCondition(
+                key="metadata.company",  # Updated to match new payload structure
+                match=models.MatchValue(value=company),
+            )
+        ]
+    )
+    
+    # Get the client from the database
+    client = db._client
+    
+    # Get embeddings for the query
+    query_vector = embeddings.embed_query(query)
+    
+    # Search with metadata filter
+    results = client.search(
+        collection_name=company,
+        query_vector=query_vector,
+        query_filter=search_filter,
+        limit=k
+    )
+    
+    # Convert results to documents
+    documents = []
+    for result in results:
+        # Create a new Document with the stored text and metadata
+        doc = Document(
+            page_content=result.payload['text'],
+            metadata=result.payload['metadata']
+        )
+        documents.append((doc, result.score))
+    
+    return documents
 
 
 def question_pdf(question, documents):
-    print(documents)
+    # Extract just the documents from document-score tuples if they exist
+    if documents and isinstance(documents[0], tuple):
+        documents = [doc for doc, score in documents]
+    
     context = "\n\n".join([doc.page_content for doc in documents])
     prompt = ChatPromptTemplate.from_template(template)
     chain = prompt | model
