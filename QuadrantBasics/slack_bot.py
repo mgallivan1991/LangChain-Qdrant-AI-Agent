@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
-import main as main
+from main import create_qdrant_database, retrieve_docs, question_pdf, retrieve_doc_by_metadata
 
 # Load environment variables from .env file
 load_dotenv()
@@ -52,6 +52,19 @@ def handle_message_events(body, logger):
                     )
                     return
                 
+                # Try to initialize the database to verify it works
+                try:
+                    db = create_qdrant_database(company_name)
+                    if not db:
+                        raise Exception("Failed to create or connect to database")
+                except Exception as e:
+                    print(f"Database initialization error: {str(e)}")
+                    app.client.chat_postMessage(
+                        channel=channel_id,
+                        text="Error connecting to company database. Please try again later."
+                    )
+                    return
+                
                 # Update the channel-company mapping
                 channel_company_mapping[channel_id] = company_name
                 print(f"Updated channel mapping. New mappings: {channel_company_mapping}")
@@ -87,11 +100,13 @@ def handle_message_events(body, logger):
         
         try:
             # Initialize the vector database for the company
-            db = main.create_qdrant_database(company)
+            db = create_qdrant_database(company)
+            if not db:
+                raise Exception("Failed to connect to database")
             
             # Search for relevant documents
             print(f"Searching for documents related to: {message_text}")
-            related_documents = main.retrieve_docs(db, message_text, company)
+            related_documents = retrieve_docs(db, message_text, company)
             
             if not related_documents:
                 print("No relevant documents found")
@@ -103,7 +118,7 @@ def handle_message_events(body, logger):
             
             print(f"Found {len(related_documents)} relevant documents")
             # Generate answer using the question_pdf function
-            answer = main.question_pdf(message_text, related_documents)
+            answer = question_pdf(message_text, related_documents)
             
             # Send the response back to Slack
             app.client.chat_postMessage(
