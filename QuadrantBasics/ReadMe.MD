@@ -11,3 +11,11 @@ ollama pull deepseek-r1:1.5b
 ```powershell
 ollama run deepseek-r1:1.5b
 ```
+
+# Command to run 
+```cmd
+python slack_bot.py
+```
+
+# How to set a company to a slack channel
+!set company Company A
