@@ -41,31 +41,32 @@ app = App(
 channel_company_mapping = load_channel_mappings()
 print(f"Loaded channel mappings: {channel_company_mapping}")
 
-@app.event("message")
-def handle_message_events(body, logger):
+def extract_message_text(body):
+    """Extract the actual message text without the bot mention"""
+    text = body["event"].get("text", "")
+    # Remove the bot user ID from the message (format: <@BOTID> message)
+    return text.split(">", 1)[1].strip() if ">" in text else text.strip()
+
+@app.event("app_mention")
+def handle_mentions(body, logger):
     try:
         # Get the channel ID and message text
         channel_id = body["event"]["channel"]
-        message_text = body["event"].get("text", "")
         user_id = body["event"].get("user", "")
+        message_text = extract_message_text(body)
         
         # Debug information
-        print(f"\nReceived message in channel: {channel_id}")
-        print(f"Message text: {message_text}")
+        print(f"\nReceived mention in channel: {channel_id}")
+        print(f"Message text (without mention): {message_text}")
         print(f"From user: {user_id}")
         print(f"Current channel mappings: {channel_company_mapping}")
-        print(f"Full event body: {body}")  # Print full event for debugging
-        
-        # Ignore bot messages
-        if "bot_id" in body["event"]:
-            print("Ignoring bot message")
-            return
+        print(f"Full event body: {body}")
         
         # Check if this is a set company command
-        if message_text and message_text.lower().startswith("!set company"):
+        if message_text.lower().startswith("set company"):
             try:
                 # Extract company name from message
-                company_name = message_text[12:].strip()  # Remove "!set company" and whitespace
+                company_name = message_text[11:].strip()  # Remove "set company" and whitespace
                 print(f"Attempting to set company to: {company_name}")
                 
                 # Validate company name
@@ -73,7 +74,7 @@ def handle_message_events(body, logger):
                     print(f"Invalid company name: {company_name}")
                     app.client.chat_postMessage(
                         channel=channel_id,
-                        text="Invalid company name. Please use one of: Company A, Company B, Company C\nExample: !set company Company A"
+                        text="Invalid company name. Please use one of: Company A, Company B, Company C\nExample: @YourBot set company Company A"
                     )
                     return
                 
@@ -117,7 +118,7 @@ def handle_message_events(body, logger):
             print(f"Channel {channel_id} not mapped to any company")
             app.client.chat_postMessage(
                 channel=channel_id,
-                text="This channel is not associated with any company yet. Use '!set company [Company Name]' to set up the integration.\nExample: !set company Company A"
+                text="This channel is not associated with any company yet. Use '@YourBot set company [Company Name]' to set up the integration.\nExample: @YourBot set company Company A"
             )
             return
         
@@ -161,12 +162,8 @@ def handle_message_events(body, logger):
                 text="I encountered an error while processing your question. Please try again later."
             )
     except Exception as e:
-        print(f"Error handling message event: {str(e)}")
-        logger.error(f"Error handling message event: {str(e)}")
-
-@app.event("app_mention")
-def handle_mentions(body, logger):
-    print(f"Bot was mentioned: {body}")
+        print(f"Error handling mention event: {str(e)}")
+        logger.error(f"Error handling mention event: {str(e)}")
 
 def verify_slack_connection(app_instance):
     try:
@@ -201,8 +198,8 @@ def main():
         return
     
     print("\nAvailable commands:")
-    print("  !set company [Company Name] - Associate the channel with a company")
-    print("  Just type your question - Ask about company documents")
+    print("  @YourBot set company [Company Name] - Associate the channel with a company")
+    print("  @YourBot [your question] - Ask about company documents")
     print("\nWaiting for messages...")
     
     # Start the app in Socket Mode
