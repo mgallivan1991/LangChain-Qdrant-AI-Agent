@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -7,14 +8,38 @@ from main import create_qdrant_database, retrieve_docs, question_pdf, retrieve_d
 # Load environment variables from .env file
 load_dotenv()
 
+# Constants
+MAPPING_FILE = "channel_mappings.json"
+
+def load_channel_mappings():
+    """Load channel to company mappings from JSON file"""
+    try:
+        if os.path.exists(MAPPING_FILE):
+            with open(MAPPING_FILE, 'r') as f:
+                return json.load(f)
+        return {}
+    except Exception as e:
+        print(f"Error loading channel mappings: {str(e)}")
+        return {}
+
+def save_channel_mappings(mappings):
+    """Save channel to company mappings to JSON file"""
+    try:
+        with open(MAPPING_FILE, 'w') as f:
+            json.dump(mappings, f, indent=2)
+        print(f"Channel mappings saved to {MAPPING_FILE}")
+    except Exception as e:
+        print(f"Error saving channel mappings: {str(e)}")
+
 # Initialize the Slack app with your bot token and signing secret
 app = App(
     token=os.environ.get("SLACK_BOT_TOKEN"),
     signing_secret=os.environ.get("SLACK_SIGNING_SECRET")
 )
 
-# Store company associations for channels
-channel_company_mapping = {}  # We'll populate this dynamically
+# Load existing channel mappings from file
+channel_company_mapping = load_channel_mappings()
+print(f"Loaded channel mappings: {channel_company_mapping}")
 
 @app.event("message")
 def handle_message_events(body, logger):
@@ -67,6 +92,8 @@ def handle_message_events(body, logger):
                 
                 # Update the channel-company mapping
                 channel_company_mapping[channel_id] = company_name
+                # Save the updated mappings to file
+                save_channel_mappings(channel_company_mapping)
                 print(f"Updated channel mapping. New mappings: {channel_company_mapping}")
                 
                 app.client.chat_postMessage(
