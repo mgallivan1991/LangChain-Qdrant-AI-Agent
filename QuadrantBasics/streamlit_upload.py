@@ -1,12 +1,28 @@
 import streamlit as st
 import main as main
 import os
+from uuid import uuid4
 
 st.title("Upload PDFs to Company Database")
 
+# Initialize session state for tracking the selected company
+if 'previous_company' not in st.session_state:
+    st.session_state.previous_company = None
+
 # Company selection
 companies = ["Company A", "Company B", "Company C"]  # You can modify this list as needed
-selected_company = st.selectbox("Select Company", companies)
+selected_company = st.selectbox("Select Company", companies, key='company_selector')
+
+# Check if company has changed
+if st.session_state.previous_company is not None and st.session_state.previous_company != selected_company:
+    # Clear the file uploader by resetting its key
+    st.session_state.file_uploader_key = str(uuid4())
+else:
+    if 'file_uploader_key' not in st.session_state:
+        st.session_state.file_uploader_key = 'initial'
+
+# Update previous company
+st.session_state.previous_company = selected_company
 
 # Initialize vector database for the selected company
 db = main.create_qdrant_database(selected_company)
@@ -19,7 +35,8 @@ st.sidebar.write(f"Number of documents in collection: {len(doc_list[0]) if doc_l
 uploaded_file = st.file_uploader(
     "Upload PDF",
     type="pdf",
-    accept_multiple_files=False
+    accept_multiple_files=False,
+    key=st.session_state.file_uploader_key  # Use dynamic key to force reset
 )
 
 if uploaded_file:
